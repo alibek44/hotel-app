@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="style.css">
+    <title>Manage My Bookings</title>
+</head>
+<body>
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="hotels.html">Hotels</a>
+        <a href="bookings.html">My Bookings</a>
+        <a href="auth.html">Login/Register</a>
+    </nav>
+    <div class="container">
+        <h2>My Current Bookings</h2>
+        <div id="bookingList"></div>
+    </div>
+
+<script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = "auth.html";
+
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+    };
+
+    // 1. Function to Load and Display Bookings
+    async function loadBookings() {
+        const list = document.getElementById('bookingList'); 
+        
+        try {
+            const res = await fetch('/api/bookings', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const bookings = await res.json();
+
+            if (bookings.length === 0) {
+                list.innerHTML = "<div class='card'><h3>You have no bookings yet.</h3></div>";
+                return;
+            }
+
+            list.innerHTML = bookings.map(b => {
+                // Calculate total price for display
+                const hotelPrice = b.hotelId ? b.hotelId.price : 0;
+                const totalPrice = hotelPrice * (b.nights || 1);
+
+                return `
+                <div class="card" style="margin-bottom: 20px; padding: 20px; border-left: 5px solid #007bff;">
+                    <h3>Hotel: ${b.hotelId ? b.hotelId.name : 'Unknown Hotel'}</h3>
+                    <p>📍 ${b.hotelId ? b.hotelId.city : 'N/A'}</p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0;">
+                        <div>
+                            <label style="display:block; font-size: 0.8em;">📅 Check-in Date: </label>
+                            <input type="date" id="date-${b._id}" value="${new Date(b.checkIn).toISOString().split('T')[0]}" style="width: 90%;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size: 0.8em;">🌙 Nights: </label>
+                            <input type="number" id="nights-${b._id}" value="${b.nights || 1}" min="1" style="width: 60px;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size: 0.8em;">👥 Guests: </label>
+                            <input type="number" id="guests-${b._id}" value="${b.guests || 1}" style="width: 60px;">
+                        </div>
+                        <div style="align-self: flex-end;">
+                            <p style="margin:0; font-weight:bold; color: #28a745;">Total: ${formatCurrency(totalPrice)}</p>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                        <button onclick="updateBooking('${b._id}')" style="background: #ffc107; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                            Update Changes
+                        </button>
+                        
+                        <button onclick="cancelBooking('${b._id}')" style="background: #dc3545; color: white; border: none; padding: 8px 15px; border-radius: 4px; margin-left: 10px; cursor: pointer;">
+                            Cancel Trip
+                        </button>
+                    </div>
+                </div>
+            `}).join('');
+        } catch (err) {
+            console.error("Load Error:", err);
+            list.innerHTML = "<p style='color:red'>Error loading bookings. Ensure the server is running.</p>";
+        }
+    }
+
+    // 2. Function to Update Booking (Date, Guests, and Nights)
+    async function updateBooking(bookingId) {
+        const guests = document.getElementById(`guests-${bookingId}`).value;
+        const checkIn = document.getElementById(`date-${bookingId}`).value;
+        const nights = document.getElementById(`nights-${bookingId}`).value;
+
+        if (!checkIn) return alert("Please select a date");
+
+        try {
+            const res = await fetch(`/api/bookings/${bookingId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ 
+                    guests: Number(guests),
+                    checkIn: checkIn,
+                    nights: Number(nights)
+                })
+            });
+
+            if (res.ok) {
+                alert("Reservation updated successfully!");
+                loadBookings(); 
+            } else {
+                const err = await res.json();
+                alert("Update failed: " + (err.error || "Server error"));
+            }
+        } catch (error) {
+            alert("Connection error.");
+        }
+    }
+
+    // 3. Function to Delete/Cancel Booking
+    async function cancelBooking(id) {
+        if (!confirm("Are you sure you want to cancel this booking?")) return;
+
+        try {
+            const res = await fetch(`/api/bookings/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (res.ok) {
+                alert("Booking cancelled.");
+                loadBookings();
+            } else {
+                alert("Failed to cancel booking.");
+            }
+        } catch (err) {
+            alert("Server error.");
+        }
+    }
+
+    // Initial load
+    loadBookings();
+</script>
+</body>
+</html>

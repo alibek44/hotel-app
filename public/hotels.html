@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>Hotel Catalog | AllBook</title>
+</head>
+<body>
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="hotels.html">Hotels</a>
+        <a href="bookings.html">My Bookings</a>
+        <a href="auth.html">Login/Register</a>
+    </nav>
+
+    <div class="container">
+        <div id="adminPanel" class="card" style="display:none; border:1px dashed blue; margin-bottom: 20px;">
+            <h3 id="adminTitle">Admin: Add Hotel</h3>
+            <div style="display: grid; gap: 10px;">
+                <input id="hName" placeholder="Hotel Name">
+                <input id="hCity" placeholder="City">
+                <input id="hPrice" type="number" placeholder="Price per Night">
+                <input id="hAmenities" placeholder="Amenities (comma separated: WiFi, Pool)">
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="addHotel()" id="adminBtn" style="flex: 1;">Save Hotel</button>
+                    <button onclick="resetAdminForm()" style="background:#6c757d; flex: 1;">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 8px;">
+            <h3>🔍 Search & Filter</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="text" id="searchCity" placeholder="Search City...">
+                <input type="number" id="maxPrice" placeholder="Max Budget ($)">
+                <button onclick="loadHotels()" style="background: #28a745;">Apply Filters</button>
+                <button onclick="clearFilters()" style="background: #6c757d;">Reset</button>
+            </div>
+        </div>
+
+        <h2 style="margin-top: 30px;">Available Properties</h2>
+        <div id="hotelList"></div>
+    </div>
+
+<script>
+        const token = localStorage.getItem('token');
+        const role = localStorage.getItem('role');
+
+        if (role === 'admin') {
+            document.getElementById('adminPanel').style.display = 'block';
+        }
+
+        const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+        };
+
+        // NEW: Live Price Update helper
+        function updateTotal(id, price) {
+            const nights = document.getElementById(`nights-${id}`).value;
+            document.getElementById(`total-${id}`).innerText = formatCurrency(nights * price);
+        }
+
+        async function loadHotels() {
+            const list = document.getElementById('hotelList');
+            const city = document.getElementById('searchCity').value;
+            const price = document.getElementById('maxPrice').value;
+
+            list.innerHTML = `<div class="card"><h3>⌛ Loading Hotels...</h3></div>`;
+
+            let params = new URLSearchParams();
+            if(city) params.append('city', city);
+            if(price) params.append('price', price);
+            
+            try {
+                const res = await fetch(`/api/hotels?${params.toString()}`);
+                const hotels = await res.json();
+                
+                if (hotels.length === 0) {
+                    list.innerHTML = "<div class='card'><p>No properties found matching your criteria.</p></div>";
+                    return;
+                }
+
+                list.innerHTML = hotels.map(h => `
+                    <div class="card" style="margin-bottom: 25px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div>
+                                <h2 style="margin: 0;">${h.name}</h2>
+                                <p>📍 ${h.city} | <b style="color: #28a745;">${formatCurrency(h.price)} / night</b></p>
+                                <p><small>Amenities: ${h.amenities && h.amenities.length > 0 ? h.amenities.join(' • ') : 'Standard'}</small></p>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 5px;">
+                                ${role === 'admin' ? `
+                                    <button onclick="editHotel('${h._id}', '${h.name}', '${h.city}', ${h.price}, '${h.amenities ? h.amenities.join(', ') : ''}')" style="background: #ffc107; color: black; border: none; padding: 8px; border-radius: 4px; cursor: pointer;">Edit</button>
+                                    <button onclick="deleteHotel('${h._id}')" style="background: #dc3545; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer;">Delete</button>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #e9ecef;">
+                            <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+                                <div>
+                                    <label style="display:block; font-size: 12px; font-weight: bold;">Check-in Date</label>
+                                    <input type="date" id="date-${h._id}" style="padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                                </div>
+                                <div>
+                                    <label style="display:block; font-size: 12px; font-weight: bold;">Nights</label>
+                                    <input type="number" id="nights-${h._id}" value="1" min="1" 
+                                           oninput="updateTotal('${h._id}', ${h.price})" 
+                                           style="width: 60px; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                                </div>
+                                <button onclick="bookHotel('${h._id}')" style="background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight:bold;">Reserve Now</button>
+                            </div>
+                            <p style="margin-top: 10px; font-weight: bold; color: #495057;">Estimated Total: <span id="total-${h._id}" style="color: #28a745;">${formatCurrency(h.price)}</span></p>
+                        </div>
+                        
+                        <div class="review-section" style="background: #f1f3f5; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                            <h4>Guest Reviews (${h.reviews ? h.reviews.length : 0})</h4>
+                            <div style="max-height: 150px; overflow-y: auto; margin-bottom: 10px; font-size: 0.9em;">
+                                ${h.reviews && h.reviews.length > 0 ? h.reviews.map(r => `
+                                    <p style="border-bottom: 1px solid #dee2e6; padding: 8px 0; margin: 0;">
+                                        <strong>${r.username}:</strong> ${r.comment} 
+                                        <span style="color: #f39c12; margin-left: 5px;">${'⭐'.repeat(r.rating)}</span>
+                                    </p>
+                                `).join('') : '<p style="color: #868e96;">Be the first to leave a review!</p>'}
+                            </div>
+
+                            <div style="display: flex; gap: 5px; margin-top: 10px;">
+                                <input type="text" id="comment-${h._id}" placeholder="Share your experience..." style="flex: 1; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
+                                <select id="rating-${h._id}" style="padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
+                                    <option value="5">5 ⭐</option>
+                                    <option value="4">4 ⭐</option>
+                                    <option value="3">3 ⭐</option>
+                                    <option value="2">2 ⭐</option>
+                                    <option value="1">1 ⭐</option>
+                                </select>
+                                <button onclick="submitReview('${h._id}')" style="background: #495057; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">Post</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                list.innerHTML = `<div class='card' style='color:red'><h3>Connection Error</h3><p>Could not reach the server.</p></div>`;
+            }
+        }
+
+        async function submitReview(hotelId) {
+            const comment = document.getElementById(`comment-${hotelId}`).value;
+            const rating = document.getElementById(`rating-${hotelId}`).value;
+            if (!comment || !rating) return alert("Please add a comment and rating");
+
+            try {
+                const res = await fetch(`/api/hotels/${hotelId}/reviews`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ comment: comment, rating: Number(rating) })
+                });
+                if (res.ok) { alert("Review posted!"); loadHotels(); }
+                else { alert("Review failed. Check if you are logged in."); }
+            } catch (error) { console.error("Review Error:", error); }
+        }
+
+        // UPDATED: Book Hotel sends Check-in Date and Nights
+        async function bookHotel(hotelId) {
+            if (!token) return alert("You must be logged in to book!");
+            
+            const checkIn = document.getElementById(`date-${hotelId}`).value;
+            const nights = document.getElementById(`nights-${hotelId}`).value;
+
+            if (!checkIn) return alert("Please select a check-in date!");
+
+            try {
+                const res = await fetch('/api/bookings', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ 
+                        hotelId: hotelId,
+                        checkIn: checkIn,
+                        nights: Number(nights)
+                    })
+                });
+
+                if (res.ok) {
+                    alert("Successfully booked!");
+                } else {
+                    const data = await res.json();
+                    alert("Error: " + (data.error || "Booking failed."));
+                }
+            } catch (error) {
+                console.error("Booking Error:", error);
+            }
+        }
+
+        function clearFilters() {
+            document.getElementById('searchCity').value = '';
+            document.getElementById('maxPrice').value = '';
+            loadHotels();
+        }
+
+        async function deleteHotel(id) {
+            if (!confirm("Permanently remove this hotel from the catalog?")) return;
+            try {
+                const res = await fetch(`/api/hotels/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) loadHotels();
+            } catch (err) { alert("Failed to delete."); }
+        }
+
+        let editMode = false;
+        let currentEditId = null;
+
+        function editHotel(id, name, city, price, amenities) {
+            editMode = true;
+            currentEditId = id;
+            document.getElementById('hName').value = name;
+            document.getElementById('hCity').value = city;
+            document.getElementById('hPrice').value = price;
+            document.getElementById('hAmenities').value = amenities;
+            document.getElementById('adminTitle').innerText = "Admin: Edit Hotel";
+            document.getElementById('adminBtn').innerText = "Update Hotel Details";
+            document.getElementById('adminPanel').style.display = 'block';
+            document.getElementById('adminPanel').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function addHotel() {
+            const amenitiesInput = document.getElementById('hAmenities').value;
+            const body = {
+                name: document.getElementById('hName').value,
+                city: document.getElementById('hCity').value,
+                price: Number(document.getElementById('hPrice').value),
+                amenities: amenitiesInput.split(',').map(item => item.trim()).filter(i => i !== "")
+            };
+
+            const url = editMode ? `/api/hotels/${currentEditId}` : '/api/hotels';
+            const method = editMode ? 'PATCH' : 'POST';
+
+            try {
+                const res = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(body)
+                });
+
+                if (res.ok) {
+                    alert(editMode ? "Updated!" : "Hotel Added!");
+                    resetAdminForm();
+                    loadHotels();
+                } else {
+                    const errorData = await res.json();
+                    alert("Error: " + (errorData.error || "Admin access required"));
+                }
+            } catch (err) { alert("Server connection error."); }
+        }
+
+        function resetAdminForm() {
+            editMode = false;
+            currentEditId = null;
+            document.getElementById('hName').value = '';
+            document.getElementById('hCity').value = '';
+            document.getElementById('hPrice').value = '';
+            document.getElementById('hAmenities').value = '';
+            document.getElementById('adminTitle').innerText = "Admin: Add Hotel";
+            document.getElementById('adminBtn').innerText = "Save Hotel";
+        }
+
+        loadHotels();
+    </script>
+</body>
+</html>

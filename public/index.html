@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="style.css">
+    <title>Hotel Booking App</title>
+</head>
+<body>
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="hotels.html">Hotels</a>
+        <a href="bookings.html">My Bookings</a>
+        <a href="auth.html">Login/Register</a>
+    </nav>
+
+    <div class="container" style="text-align: center; margin-top: 50px;">
+        <h1>Welcome to AllBook</h1>
+        <p>The ultimate platform for booking hotels and apartments.</p>
+        <div class="card">
+            <h3>Quick Stats (Market Overview)</h3>
+            <div id="quickStats">Loading city data...</div>
+        </div>
+    </div>
+
+    <script>
+        async function loadQuickStats() {
+            const statsDiv = document.getElementById('quickStats');
+            try {
+                const res = await fetch('/api/stats/cities');
+                const data = await res.json();
+
+                if (!data || data.length === 0) {
+                    statsDiv.innerHTML = "<p>No data available yet.</p>";
+                    return;
+                }
+
+                statsDiv.innerHTML = `
+                    <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-top: 15px;">
+                        ${data.map(item => `
+                            <div class="card" style="min-width: 150px; text-align: center; border: 1px solid #ddd; padding: 15px;">
+                                <h4 style="margin: 0; color: #007bff;">${item.city}</h4>
+                                <p style="margin: 10px 0;">🏨 ${item.totalHotels} Hotels</p>
+                                <p style="font-weight: bold; color: #28a745;">Avg: $${item.avgPrice}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (err) {
+                statsDiv.innerHTML = "<p>Error loading stats. Check server connection.</p>";
+            }
+        }
+
+        loadQuickStats();
+    </script>
+</body>
+</html>

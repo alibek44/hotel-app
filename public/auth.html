@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="style.css">
+    <title>Login/Register</title>
+</head>
+<body>
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="hotels.html">Hotels</a>
+        <a href="bookings.html">My Bookings</a>
+        <a href="auth.html">Login/Register</a>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <h2>Register / Login</h2>
+            <input type="text" id="username" placeholder="Username"><br><br>
+            <input type="password" id="password" placeholder="Password"><br><br>
+            <select id="role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+            </select><br><br>
+            <button onclick="register()">Register</button>
+            <button onclick="login()" style="background:#007bff">Login</button>
+        </div>
+    </div>
+
+    <script>
+        async function register() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const role = document.getElementById('role').value;
+
+            // Simple input validation
+            if (!username || !password) {
+                return alert("Please fill in all fields");
+            }
+
+            try {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, role })
+                });
+
+                if (res.ok) {
+                    alert("Registration Successful! Please Login.");
+                } else {
+                    const data = await res.json();
+                    alert("Registration Error: " + (data.error || "Username may be taken"));
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Connection refused. Is the server running?");
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                return alert("Please enter username and password");
+            }
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('role', data.role);
+                    localStorage.setItem('username', data.username);
+                    alert("Logged in as " + data.role);
+                    window.location.href = "hotels.html";
+                } else {
+                    alert("Login failed: " + (data.error || "Invalid credentials"));
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Network error: Could not reach the server.");
+            }
+        }
+    </script>
+</body>
+</html>
